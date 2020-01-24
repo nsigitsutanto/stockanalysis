@@ -1,0 +1,243 @@
+---
+title: "The Analysis on 4 'Big Bank' Stocks in Indonesia"
+author: "Nicodemus Sigit Sutanto"
+date: "`r format(Sys.Date(), '%B %e, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: 
+        collapsed: false
+    number_sections: true
+    theme: cosmo
+    highlight: tango
+  fig_caption: yes
+  code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center",
+  comment = "#>",
+  echo = TRUE
+)
+```
+# Introduction
+
+It is always interesting to discuss about investment. We can do invest in several products, such as stocks, mutual fund, and precious metals, including gold and silver. Talking about investment in stocks and mutual funds, investing in these two can multiply your money way better than bank's interest rates. Blue chips are named for stocks which are poven to be reliable in long-term investment. Several stocks which are classified as blue-chip stocks come from banking sector. Bank BCA, Bank Mandiri, Bank BNI 46 and Bank BRI are several banking companies which are classified as blue-chip stocks and have high capitalization in market. They also drive the index composite (IHSG).
+
+In this analysis, we analyse these 4 bank's stocks to know which bank has highest growth and return of investment. We take the data from scraping Yahoo! Finance website which has complete historical data of these stocks. The data that we use are 5 years-range data of open and close stock price, transaction volume from 21st January 2015 to 21st January 2020. RSelenium package are used to do scraping work and we use ggplot2 to visualize the data and trends, so we can see the insight of these analysis.
+
+# Profile {.tabset}
+
+## Bank BCA
+
+![](assets/logo BCA.PNG)
+
+PT Bank Central Asia Tbk, commonly known as Bank Central Asia (BCA) is an Indonesian bank founded on February 21, 1957. In 2016, BCA overtook DBS Bank of Singapore as Southeast Asia's biggest lender by value, with a market capitalisation of US$24.5 billion (S$34.2 billion).
+
+## Bank Mandiri
+
+![](assets/logo mandiri.PNG)
+
+PT Bank Mandiri (Persero) Tbk or Bank Mandiri, headquartered in Jakarta, is the largest bank in Indonesia in terms of assets, loans and deposits. Total assets as of Q3 2012 were IDR 588.4 trillion (around US$59.8 billion). It also had a Capital Adequacy Ratio (CAR) of 16.08% (including market risk), Return on Asset (RoA) of 3.45%, and Return on Equity (RoE) of 22.18%. As of September 2012, Bank Mandiri was the largest bank in Indonesia by total assets.
+
+## Bank BRI
+
+![](assets/logo BRI.PNG)
+
+PT Bank Rakyat Indonesia (Persero) Tbk (People's Bank of Indonesia, commonly known as BRI or Bank BRI) is one of the largest banks in Indonesia. It specialises in small scale and microfinance style borrowing from and lending to its approximately 30 million retail clients through its over 4,000 branches, units and rural service posts. It also has a comparatively small, but growing, corporate business. As of 2010 it is the second largest bank in Indonesia by asset.
+
+BRI is the oldest bank in Indonesia, tracing back since 1896. It is currently 70% government owned operating company (Persero) and has been government-owned for the entire period since the war of independence (1945 to 1949) to November 2003, when 30% of its shares were sold through an IPO.
+
+## Bank BNI 46
+
+![](assets/logo BNI.PNG)
+
+PT Bank Negara Indonesia (Persero) Tbk or Bank Negara Indonesia (English: State Bank of Indonesia), is an Indonesian state-owned bank. It has branches primarily in Indonesia, but it can also found in Seoul, Singapore, Hong Kong, Tokyo, London and New York. It had 1000 branches and over 9 million customers in 2006. It is listed on the Indonesia Stock Exchange as "BBNI". Its market capitalization as of 12 March 2007 was 23.8 trillion rupiah (approximately US$2.6 billion). It is the fourth-largest bank of Indonesia in terms of assets.
+
+# Libraries and Setup
+## Call The Libraries
+
+Before we start the analysis, we should call libraries that we use.
+
+```{r message=FALSE, warning=FALSE}
+rm(list=ls())
+library(dplyr)
+library(rvest)
+library(tidytext)
+library(tidyr)
+library(tidyverse)
+library(ggplot2)
+library(RSelenium)
+library(XML)
+```
+## Insert Bank Data Frame
+
+After that, we make data.frame which consists of those banks' code. These codes are literally the abbreviation of those bank names.
+
+```{r message=FALSE, warning=FALSE}
+emiten <- data.frame(x = c("BBCA","BBNI","BBRI","BMRI"), stringsAsFactors = FALSE)
+```
+
+## Scraping History Data
+
+Scraping data from a website is tricky because we need to know some details that are hidden in the website. In this problem, we use "xpath" in order to address specific link in the website. We use "Inspect Element" option to know this "xpath" address. You can access this option by right-clicking on the feature of the website that you access. Features can be drop-down menu, submit button, search box, etc. Here how we scrape the data from the web.
+
+```{r message=FALSE, warning=FALSE}
+# start the server and browser(you can use other browsers here)
+rD <- rsDriver(browser=c("firefox"))
+
+driver <- rD$client
+
+i=1
+url1 = paste('https://finance.yahoo.com/quote/',emiten[i,],'.JK/history?period1=1421798400&period2=1579564800&interval=1d&filter=history&frequency=1d',sep='')
+driver$navigate(url1)
+
+element <- driver$findElement("css", "body")
+flag <- TRUE
+counter <- 0
+n <- 5
+while(flag){
+    counter <- counter + 1
+    #compare the pagesource every n(n=5) time, since sometimes one scroll down doesn't render new content
+    for(i in 1:n){
+        element$sendKeysToElement(list("key"="page_down"))
+        Sys.sleep(2)
+    }
+    if(exists("pagesource")){
+        if(pagesource == driver$getPageSource()[[1]]){
+            flag <- FALSE
+            writeLines(paste0("Scrolled down ",n*counter," times.\n"))
+        } else {
+            pagesource <- driver$getPageSource()[[1]]
+        }
+    } else {
+        pagesource <- driver$getPageSource()[[1]]
+    }
+}
+
+doc <- htmlParse(driver$getPageSource()[[1]])
+x=readHTMLTable(doc)
+test=x[["NULL"]]
+test$emiten=emiten[1,]
+
+for(s in 2:4){
+# navigate to an URL
+  url1 = paste('https://finance.yahoo.com/quote/',emiten[s,],'.JK/history?period1=1421798400&period2=1579564800&interval=1d&filter=history&frequency=1d',sep='')
+driver$navigate(url1)
+
+element <- driver$findElement("css", "body")
+flag <- TRUE
+counter <- 0
+n <- 5
+while(flag){
+    counter <- counter + 1
+    #compare the pagesource every n(n=5) time, since sometimes one scroll down doesn't render new content
+    for(i in 1:n){
+        element$sendKeysToElement(list("key"="page_down"))
+        Sys.sleep(2)
+    }
+    if(exists("pagesource")){
+        if(pagesource == driver$getPageSource()[[1]]){
+            flag <- FALSE
+            writeLines(paste0("Scrolled down ",n*counter," times.\n"))
+        } else {
+            pagesource <- driver$getPageSource()[[1]]
+        }
+    } else {
+        pagesource <- driver$getPageSource()[[1]]
+    }
+}
+
+doc <- htmlParse(driver$getPageSource()[[1]])
+x=readHTMLTable(doc)
+y=x[["NULL"]]
+y$emiten=emiten[s,]
+test=rbind(y,test)
+}
+data=test
+
+rm(rD)
+gc()
+```
+### Cleaning Data
+
+After we got the data, it is time to clean the data. Here is how to clean the data.
+
+First of all, we convert all column headers to lowercase to ease us when clean the data.
+```{r message=FALSE, warning=FALSE}
+#lowering header
+judul=colnames(data)
+judul=tolower(judul)
+judul=gsub(' ','',judul)
+colnames(data)=judul
+```
+
+Let's see a sneak-peek of the data by execute this code.
+```{r}
+str(data)
+```
+
+After we know the format of each column, we convert "date" column to date format and clean all numbers from comma and dot zero decimals, so we can convert the number to numerical format.
+```{r message=FALSE, warning=FALSE}
+#convert to date and numbers
+library(lubridate)
+data$date=mdy(data$date)
+for(i in 2:7){
+  data[,i]=gsub("\\.00","",data[,i])
+  data[,i]=gsub("\\,","",data[,i])
+  data[,i]=as.numeric(data[,i])
+}
+```
+
+Later on, we do some deletion on NA data, so we can process the data without any concern of empty cells.
+```{r message=FALSE, warning=FALSE}
+#delete NA row in open
+data=data %>% filter(!is.na(open))
+```
+
+# Analysing {.tabset}
+
+Let see the general trend of data using stock price and volume transaction of those banks. We use close price as the reference for stock price.
+
+## Stock Price
+```{r message=FALSE, warning=FALSE}
+ggplot(data,aes(x=date,y=`close*`))+
+  geom_line(aes(color=emiten)) +
+  labs(title="All 5 Years Data of Close Prices",color="Emiten",x="Time",y="Close Price in Rupiah")
+```
+
+We can see that BBCA has the highest stock price and the steepest trend of price increase comparing to other banks. We also see BBRI has lowest price among these stock prices.
+
+## Volume Transaction
+```{r message=FALSE, warning=FALSE}
+ggplot(data,aes(x=date,y=volume))+
+  geom_line(aes(color=emiten)) +
+  labs(title="All 5 Years Data of Volume Transaction",color="Emiten",x="Time",y="Shares")
+```
+
+In this chart, we can see BBRI has the highest amount of transaction, where BBCA has the lowest one.
+
+## Growth in One Day
+
+Let's do some math on the data.
+```{r message=FALSE, warning=FALSE}
+data$growth=((data$close-data$open)/data$open)*100
+```
+
+We also want to know mean growth per month in year, so we add a little calculation again.
+
+```{r message=FALSE, warning=FALSE}
+data$month=month(data$date,label = TRUE)
+data$year=year(data$date)
+
+datamon=data %>% group_by(month,year,emiten) %>% summarise(mean_growth=mean(growth))
+```
+
+# Conclusion
+
+
+# Reference
